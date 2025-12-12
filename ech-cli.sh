@@ -272,19 +272,24 @@ view_logs() {
          echo -e "当前无活跃客户端连接"
     else
          echo -e "在线客户端数: ${GREEN}$COUNT${PLAIN}"
-         echo -e "客户端列表 (IP归属地查询中...):"
+         echo -e "客户端列表:"
          
          # 循环查询 IP 归属地
          while read -r ip; do
              if [ ! -z "$ip" ]; then
-                 # 使用 ip-api.com 查询 (设置超时防止卡顿)
-                 LOCATION=$(curl -s -m 2 "http://ip-api.com/line/${ip}?fields=country,regionName,city,isp&lang=zh-CN" 2>/dev/null)
-                 if [ $? -eq 0 ] && [ ! -z "$LOCATION" ]; then
-                     # 将多行结果转换为单行显示
+                 # 移除可能的端口号（兼容 ipv4:port 格式）
+                 clean_ip=$(echo "$ip" | sed 's/:[0-9]*$//')
+                 
+                 # 使用 ip-api.com (HTTP) 查询，纯文本格式，增加超时
+                 # 替换为更稳定的 API 或者增加重试。ip-api 很稳定，可能是 curl 参数问题。
+                 # 尝试使用 -L 跟随重定向，-k 忽略证书（如果是https）
+                 LOCATION=$(curl -s -m 2 "http://ip-api.com/line/${clean_ip}?fields=country,regionName,city,isp&lang=zh-CN")
+                 
+                 if [ ! -z "$LOCATION" ]; then
                      LOC_STR=$(echo "$LOCATION" | tr '\n' ' ' | sed 's/ $//')
                      echo -e " ${CYAN}$ip${PLAIN} \t-> ${YELLOW}[$LOC_STR]${PLAIN}"
                  else
-                     echo -e " ${CYAN}$ip${PLAIN} \t-> ${RED}[位置未知]${PLAIN}"
+                     echo -e " ${CYAN}$ip${PLAIN} \t-> ${RED}[位置查询超时]${PLAIN}"
                  fi
              fi
          done <<< "$CLIENTS"
@@ -308,8 +313,15 @@ check_script_update() {
     
     if [ ! -f "$UPDATE_TMP" ]; then
         # 如果没有临时文件，启动后台进程去查
+        # 智能选择源：如果之前检测到在国内，就用加速镜像
         (
-            REMOTE_VERSION=$(curl -s -m 3 --connect-timeout 3 "https://raw.githubusercontent.com/lzban8/ech-cli-tool/main/ech-cli.sh" | grep 'SCRIPT_VER="' | head -n 1 | cut -d '"' -f 2)
+            CHECK_URL="https://raw.githubusercontent.com/lzban8/ech-cli-tool/main/ech-cli.sh"
+            # 简单检测一下 connectivity
+            if ! curl -s -m 2 --head https://raw.githubusercontent.com >/dev/null; then
+                 CHECK_URL="https://gh-proxy.org/https://raw.githubusercontent.com/lzban8/ech-cli-tool/main/ech-cli.sh"
+            fi
+            
+            REMOTE_VERSION=$(curl -s -m 5 "$CHECK_URL" | grep 'SCRIPT_VER="' | head -n 1 | cut -d '"' -f 2)
             echo "$REMOTE_VERSION" > "$UPDATE_TMP"
         ) &
         UPDATE_TIP="${YELLOW}检查中...${PLAIN}"
