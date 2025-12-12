@@ -259,10 +259,10 @@ view_logs() {
     
     CLIENTS=""
     if command -v ss >/dev/null 2>&1; then
-        # ss output format can vary, allow for simple matching
-        CLIENTS=$(ss -an state established | grep ":$CONF_PORT" | awk '{print $5}' | awk -F: '{print $1}' | sort | uniq | grep -v "127.0.0.1")
+        # 修复 IPv6 显示不全问题 (移除最后冒号后的端口号，并清理中括号)
+        CLIENTS=$(ss -an state established | grep ":$CONF_PORT" | awk '{print $5}' | sed 's/\[//g; s/\]//g' | rev | cut -d: -f2- | rev | sort | uniq | grep -v "127.0.0.1")
     elif command -v netstat >/dev/null 2>&1; then
-        CLIENTS=$(netstat -an | grep ":$CONF_PORT" | grep ESTABLISHED | awk '{print $5}' | awk -F: '{print $1}' | sort | uniq | grep -v "127.0.0.1")
+        CLIENTS=$(netstat -an | grep ":$CONF_PORT" | grep ESTABLISHED | awk '{print $5}' | sed 's/\[//g; s/\]//g' | rev | cut -d: -f2- | rev | sort | uniq | grep -v "127.0.0.1")
     fi
     
     # 统计数量
@@ -272,8 +272,22 @@ view_logs() {
          echo -e "当前无活跃客户端连接"
     else
          echo -e "在线客户端数: ${GREEN}$COUNT${PLAIN}"
-         echo -e "客户端列表:"
-         echo -e "${CYAN}$CLIENTS${PLAIN}"
+         echo -e "客户端列表 (IP归属地查询中...):"
+         
+         # 循环查询 IP 归属地
+         while read -r ip; do
+             if [ ! -z "$ip" ]; then
+                 # 使用 ip-api.com 查询 (设置超时防止卡顿)
+                 LOCATION=$(curl -s -m 2 "http://ip-api.com/line/${ip}?fields=country,regionName,city,isp&lang=zh-CN" 2>/dev/null)
+                 if [ $? -eq 0 ] && [ ! -z "$LOCATION" ]; then
+                     # 将多行结果转换为单行显示
+                     LOC_STR=$(echo "$LOCATION" | tr '\n' ' ' | sed 's/ $//')
+                     echo -e " ${CYAN}$ip${PLAIN} \t-> ${YELLOW}[$LOC_STR]${PLAIN}"
+                 else
+                     echo -e " ${CYAN}$ip${PLAIN} \t-> ${RED}[位置未知]${PLAIN}"
+                 fi
+             fi
+         done <<< "$CLIENTS"
     fi
     echo -e "------------------------------------------------------"
 
@@ -282,7 +296,7 @@ view_logs() {
 }
 
 # 脚本版本
-SCRIPT_VER="v1.1.0"
+SCRIPT_VER="v1.1.1"
 
 # 检查脚本更新
 check_script_update() {
