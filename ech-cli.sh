@@ -118,7 +118,7 @@ install_ech() {
     # 尝试使用 jq 解析
     LATEST_URL=""
     if command -v jq >/dev/null 2>&1; then
-        LATEST_URL=$(echo "$RELEASE_JSON" | jq -r ".assets[] | select(.name | contains(\"linux-${ARCH}\")) | .browser_download_url")
+        LATEST_URL=$(echo "$RELEASE_JSON" | jq -r ".assets[] | select(.name | contains(\"linux-${ARCH}\")) | .browser_download_url" | head -n 1)
     fi
     
     # 如果 jq 失败或未安装，使用 fallback 解析
