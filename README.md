@@ -6,11 +6,19 @@
 > 本项目是基于 [byJoey/ech-wk](https://github.com/byJoey/ech-wk) 开发的第三方管理脚本。  
 > 核心代理程序文件 (`ech-workers`) 直接来源于原作者的 Release 发布页。  
 > 感谢原作者 @byJoey 以及底层核心开发 [CF_NAT](https://t.me/CF_NAT)！
+
 ---
 
-这是一个专为 Debian / Ubuntu / Armbian / CentOS 等 Linux 系统设计的 **ECH Workers Client** 命令行管理工具 (CLI)。
+**打造家庭全天候 ECH 代理中心。**
 
-旨在为 Linux 用户（尤其是无头服务器/软路由用户）提供最便捷的安装和管理体验。
+这是一个专为 Debian / Ubuntu / Armbian / iStoreOS 等 Linux 系统设计的命令行管理工具 (CLI)。
+
+原项目主要提供了 Windows 和 Mac 的图形化客户端，但在家庭网络环境中，利用 **低功耗 Linux 设备**（如 斐讯N1、树莓派、软路由、飞牛NAS 等）进行 7x24 小时部署才是更高效的选择。
+
+通过本脚本，您可以将 Linux 设备瞬间变身为一台 **SOCKS5/HTTP 代理服务器**：
+*   ✅ **局域网共享**：家庭中的手机、PC、电视均可通过局域网 IP 连接代理。
+*   ✅ **远程访问**：配合 DDNS，在外网也能安全连接回家的代理节点。
+*   ✅ **服务化管理**：告别繁琐的命令行参数和后台保活，一切自动化。
 
 <img src="preview.png" width="450" alt="Preview" />
 
@@ -40,7 +48,6 @@ wget -O ech-cli.sh https://raw.githubusercontent.com/lzban8/ech-cli-tool/main/ec
 chmod +x ech-cli.sh
 ./ech-cli.sh
 ```
-
 
 ## 🎮 使用指南
 
@@ -73,10 +80,56 @@ ECH_DOMAIN="cloudflare-ech.com"            # ECH 配置域名
 ROUTING="bypass_cn"                        # 分流模式: bypass_cn / global / none
 ```
 
+## 🌐 Worker 部署（服务端）
+
+本项目提供了增强版的 `_worker.js`，包含 **PROXYIP 支持**，解决 CF-to-CF 连接限制问题。
+
+### 什么是 PROXYIP？
+
+由于 Cloudflare Workers 的技术限制，无法直接连接到 Cloudflare 自有的 IP 地址段。这意味着：
+
+- ✅ 可以正常访问非 Cloudflare CDN 的站点（如 Google、YouTube）
+- ❌ 无法直接访问由 Cloudflare CDN 托管的网站（如 Twitter、ChatGPT、Discord）
+
+**PROXYIP** 通过第三方服务器作为跳板，解决这个限制。
+
+### 部署步骤
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. 进入 `Workers & Pages` → 创建 Worker
+3. 将本项目的 `_worker.js` 内容复制到编辑器中
+4. 点击 `Save and Deploy`
+
+### PROXYIP 配置
+
+在 `_worker.js` 顶部可以配置 PROXYIP：
+
+```javascript
+// 方式一：使用默认公共 PROXYIP（推荐）
+const PROXYIP = '';  // 留空，自动使用内置的公共 PROXYIP 列表
+
+// 方式二：自定义 PROXYIP
+const PROXYIP = 'your-proxyip.com';  // 单个
+const PROXYIP = 'ip1.com,ip2.com';   // 多个，用逗号分隔
+```
+
+**内置公共 PROXYIP 列表：**
+- `proxyip.cmliussss.net` - cmliu 维护
+- `proxyip.fxxk.dedyn.io` - fxxk 维护
+
+### IP 归属地说明
+
+| 访问目标 | IP 归属地决定因素 |
+|---------|-----------------|
+| 非 CF 站点（Google、YouTube 等） | 由「优选 IP」决定 |
+| CF 站点（Twitter、ChatGPT 等） | 由「PROXYIP」决定 |
+
 ## 🤝 贡献与致谢
 
 *   核心程序: [byJoey/ech-wk](https://github.com/byJoey/ech-wk)
 *   核心原创: [CF_NAT](https://t.me/CF_NAT)
+*   PROXYIP 参考: [cmliu/edgetunnel](https://github.com/cmliu/edgetunnel)
 *   脚本维护: lzban8
 
-欢迎提交 Issue 或 Pull Request 来改进此脚本！ 
+欢迎提交 Issue 或 Pull Request 来改进此脚本！
+ 
