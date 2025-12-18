@@ -477,6 +477,33 @@ view_logs() {
 # 脚本版本
 SCRIPT_VER="v1.1.2"
 
+# 版本号比较函数：判断 $1 是否大于 $2
+# 返回 0 表示 $1 > $2，返回 1 表示 $1 <= $2
+version_gt() {
+    # 去掉 v 前缀
+    local v1="${1#v}"
+    local v2="${2#v}"
+    
+    # 使用 sort -V 进行版本排序比较
+    if command -v sort >/dev/null 2>&1; then
+        local highest=$(printf '%s\n%s' "$v1" "$v2" | sort -V | tail -n 1)
+        if [[ "$highest" == "$v1" && "$v1" != "$v2" ]]; then
+            return 0
+        fi
+    else
+        # 简单的数字比较 fallback
+        IFS='.' read -r -a arr1 <<< "$v1"
+        IFS='.' read -r -a arr2 <<< "$v2"
+        for i in 0 1 2; do
+            local n1=${arr1[$i]:-0}
+            local n2=${arr2[$i]:-0}
+            if (( n1 > n2 )); then return 0; fi
+            if (( n1 < n2 )); then return 1; fi
+        done
+    fi
+    return 1
+}
+
 # 检查脚本更新
 check_script_update() {
     if [ ! -z "$UPDATE_TIP" ]; then return; fi
@@ -499,7 +526,8 @@ check_script_update() {
         if [[ -z "$REMOTE_VERSION" ]]; then
              rm -f "$UPDATE_TMP"
              UPDATE_TIP="${YELLOW}检查中...${PLAIN}"
-        elif [[ "$REMOTE_VERSION" != "$SCRIPT_VER" ]]; then
+        elif version_gt "$REMOTE_VERSION" "$SCRIPT_VER"; then
+            # 只有远程版本大于本地版本时才提示更新
             UPDATE_TIP="${GREEN}新版本: ${REMOTE_VERSION}${PLAIN}"
             CAN_UPDATE=1
         else
