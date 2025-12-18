@@ -258,7 +258,10 @@ install_ech() {
         echo -e "${GREEN}网络环境: 国际互联${PLAIN}"
     else
         echo -e "${YELLOW}网络环境: 中国大陆 (或无法访问 Google)，使用镜像加速${PLAIN}"
-        LATEST_URL="https://gh-proxy.org/${LATEST_URL}"
+        # 避免重复添加代理前缀
+        if [[ "$LATEST_URL" != *"gh-proxy.org"* ]]; then
+            LATEST_URL="https://gh-proxy.org/${LATEST_URL}"
+        fi
     fi
     
     echo -e "${GREEN}下载链接: $LATEST_URL${PLAIN}"
