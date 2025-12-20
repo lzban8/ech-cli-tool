@@ -99,6 +99,104 @@ load_config() {
     fi
 }
 
+# 备份配置
+backup_config() {
+    if [ -f "$CONF_FILE" ]; then
+        BACKUP_FILE="${CONF_FILE}.bak.$(date +%Y%m%d%H%M%S)"
+        cp "$CONF_FILE" "$BACKUP_FILE"
+        echo -e "${GREEN}配置已备份到: $BACKUP_FILE${PLAIN}"
+    else
+        echo -e "${YELLOW}没有发现配置文件${PLAIN}"
+    fi
+}
+
+# 恢复配置
+restore_config() {
+    LATEST_BACKUP=$(ls -t ${CONF_FILE}.bak.* 2>/dev/null | head -n 1)
+    if [ -f "$LATEST_BACKUP" ]; then
+        read -p "发现备份: $LATEST_BACKUP，是否恢复？[y/N]: " confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            cp "$LATEST_BACKUP" "$CONF_FILE"
+            echo -e "${GREEN}配置已恢复！${PLAIN}"
+            load_config
+        fi
+    else
+        echo -e "${YELLOW}未找到备份文件${PLAIN}"
+    fi
+}
+
+# 多优选IP测速
+test_best_ip() {
+    echo -e "${YELLOW}正在测速优选IP...${PLAIN}"
+    
+    # 默认测试列表
+    TEST_IPS=("www.visa.com.sg" "cf.cdn.xx.kg" "www.cloudflare.com" "speed.cloudflare.com")
+    
+    BEST_TIME=9999
+    BEST_IP_RESULT=""
+    
+    for ip in "${TEST_IPS[@]}"; do
+        TIME=$(curl -o /dev/null -s -w '%{time_total}' --connect-timeout 3 -m 5 "https://${ip}" 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            TIME_MS=$(echo "$TIME * 1000" | bc 2>/dev/null || echo "$TIME")
+            echo -e "  ${ip}: ${GREEN}${TIME_MS}ms${PLAIN}"
+            if (( $(echo "$TIME < $BEST_TIME" | bc -l 2>/dev/null || echo 0) )); then
+                BEST_TIME=$TIME
+                BEST_IP_RESULT=$ip
+            fi
+        else
+            echo -e "  ${ip}: ${RED}超时${PLAIN}"
+        fi
+    done
+    
+    if [ ! -z "$BEST_IP_RESULT" ]; then
+        echo -e "${GREEN}最优IP: $BEST_IP_RESULT${PLAIN}"
+        read -p "是否使用此IP？[y/N]: " confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            BEST_IP="$BEST_IP_RESULT"
+            save_config
+            echo -e "${GREEN}已更新配置！${PLAIN}"
+        fi
+    fi
+}
+
+# 健康检查
+health_check() {
+    echo -e "${YELLOW}执行健康检查...${PLAIN}"
+    
+    # 检查进程
+    if svc_is_active; then
+        echo -e "  服务状态: ${GREEN}运行中${PLAIN}"
+    else
+        echo -e "  服务状态: ${RED}未运行${PLAIN}"
+        read -p "服务未运行，是否启动？[y/N]: " confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            svc_start
+        fi
+        return
+    fi
+    
+    # 检查端口
+    CONF_PORT=${LISTEN_ADDR##*:}
+    if command -v ss >/dev/null 2>&1; then
+        if ss -ln | grep -q ":$CONF_PORT"; then
+            echo -e "  端口监听: ${GREEN}正常 (:$CONF_PORT)${PLAIN}"
+        else
+            echo -e "  端口监听: ${RED}异常${PLAIN}"
+        fi
+    fi
+    
+    # 测试代理连接
+    echo -e "  测试代理..."
+    PROXY_TEST=$(curl -x socks5://127.0.0.1:$CONF_PORT -s -m 10 -o /dev/null -w '%{http_code}' https://www.google.com 2>/dev/null)
+    if [ "$PROXY_TEST" == "200" ] || [ "$PROXY_TEST" == "204" ]; then
+        echo -e "  代理测试: ${GREEN}正常${PLAIN}"
+    else
+        echo -e "  代理测试: ${RED}失败 (HTTP: $PROXY_TEST)${PLAIN}"
+        echo -e "${YELLOW}建议: 检查服务端配置或网络连接${PLAIN}"
+    fi
+}
+
 # 保存配置
 save_config() {
     cat > "$CONF_FILE" <<EOF
@@ -280,7 +378,7 @@ install_ech() {
     
     echo -e "${GREEN}下载链接: $LATEST_URL${PLAIN}"
     
-    wget -O /tmp/ech-workers.tar.gz "$LATEST_URL"
+    wget --no-check-certificate -O /tmp/ech-workers.tar.gz "$LATEST_URL"
     if [ $? -ne 0 ]; then
         echo -e "${RED}下载失败！${PLAIN}"
         return
@@ -539,7 +637,7 @@ check_script_update() {
 
 # 更新脚本
 update_script() {
-    wget -O /root/ech-cli.sh "https://raw.githubusercontent.com/lzban8/ech-cli-tool/main/ech-cli.sh" && chmod +x /root/ech-cli.sh
+    wget --no-check-certificate -O /root/ech-cli.sh "https://raw.githubusercontent.com/lzban8/ech-cli-tool/main/ech-cli.sh" && chmod +x /root/ech-cli.sh
     echo -e "${GREEN}脚本更新成功！请重新运行脚本。${PLAIN}"
     exit 0
 }
@@ -618,12 +716,16 @@ show_menu() {
     echo -e " ${GREEN}5.${PLAIN} 停止服务"
     echo -e " ${GREEN}6.${PLAIN} 重启服务"
     echo -e " ${GREEN}7.${PLAIN} 查看日志"
-    echo -e " ${GREEN}8.${PLAIN} 卸载客户端 (保留脚本)"
-    echo -e " ${GREEN}9.${PLAIN} 创建快捷指令 (修复)"
-    echo -e " ${GREEN}10.${PLAIN} 彻底卸载 (移除所有)"
+    echo -e " ${GREEN}8.${PLAIN} 健康检查"
+    echo -e " ${GREEN}9.${PLAIN} 优选IP测速"
+    echo -e " ${GREEN}10.${PLAIN} 备份配置"
+    echo -e " ${GREEN}11.${PLAIN} 恢复配置"
+    echo -e " ${GREEN}12.${PLAIN} 卸载客户端 (保留脚本)"
+    echo -e " ${GREEN}13.${PLAIN} 创建快捷指令 (修复)"
+    echo -e " ${GREEN}14.${PLAIN} 彻底卸载 (移除所有)"
     echo -e " ${GREEN}0.${PLAIN} 退出脚本"
     echo -e "------------------------------------------------------"
-    read -p "请输入选择 [0-10]: " choice
+    read -p "请输入选择 [0-14]: " choice
     
     case $choice in
         1) install_ech ;;
@@ -633,7 +735,11 @@ show_menu() {
         5) svc_stop && echo -e "${RED}已停止${PLAIN}" ;;
         6) svc_restart && echo -e "${GREEN}已重启${PLAIN}" ;;
         7) view_logs ;;
-        8) 
+        8) health_check ;;
+        9) test_best_ip ;;
+        10) backup_config ;;
+        11) restore_config ;;
+        12) 
             svc_stop
             svc_disable
             rm -f $SERVICE_FILE_SYSTEMD $SERVICE_FILE_OPENWRT $BIN_PATH /usr/bin/ech
@@ -642,8 +748,8 @@ show_menu() {
             fi
             echo -e "${GREEN}已卸载${PLAIN}"
             ;;
-        9) create_shortcut ;;
-        10) uninstall_all ;;
+        13) create_shortcut ;;
+        14) uninstall_all ;;
         0) exit 0 ;;
         *) echo -e "${RED}无效选择${PLAIN}" ;;
     esac
