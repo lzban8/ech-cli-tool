@@ -199,6 +199,7 @@ status_check() {
         echo -e "  端口监听: ${RED}异常 - 端口 $CONF_PORT 未监听${PLAIN}"
         return
     else
+        echo -e "  端口监听: ${YELLOW}无法检测${PLAIN}"
     fi
     
     # 测试代理连接 - 使用轻量级请求
