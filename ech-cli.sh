@@ -224,7 +224,7 @@ health_check() {
     fi
     
     if [ "$PORT_OK" -eq 1 ]; then
-        echo -e "  端口监听: ${GREEN}正常 ($CONF_PORT)${PLAIN}"
+        echo -e "  端口监听: ${GREEN}正常${PLAIN}"
     elif [ "$PORT_OK" -eq 0 ]; then
         echo -e "  端口监听: ${RED}异常 - 端口 $CONF_PORT 未监听${PLAIN}"
         return
