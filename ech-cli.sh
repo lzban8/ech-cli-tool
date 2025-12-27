@@ -100,43 +100,13 @@ load_config() {
 }
 
 # 备份配置
-backup_config() {
-    if [ -f "$CONF_FILE" ]; then
-        BACKUP_FILE="${CONF_FILE}.bak.$(date +%Y%m%d%H%M%S)"
-        cp "$CONF_FILE" "$BACKUP_FILE"
-        echo -e "${GREEN}配置已备份到: $BACKUP_FILE${PLAIN}"
-    else
-        echo -e "${YELLOW}没有发现配置文件${PLAIN}"
-    fi
-}
-
-# 恢复配置
-restore_config() {
-    LATEST_BACKUP=$(ls -t ${CONF_FILE}.bak.* 2>/dev/null | head -n 1)
-    if [ -f "$LATEST_BACKUP" ]; then
-        read -p "发现备份: $LATEST_BACKUP，是否恢复？[y/N]: " confirm
-        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-            cp "$LATEST_BACKUP" "$CONF_FILE"
-            echo -e "${GREEN}配置已恢复！${PLAIN}"
-            load_config
-            create_service
-            read -p "是否立即重启服务生效？[y/N]: " restart_now
-            if [[ "$restart_now" == "y" || "$restart_now" == "Y" ]]; then
-                svc_restart
-                echo -e "${GREEN}服务已重启！${PLAIN}"
-            fi
-        fi
-    else
-        echo -e "${YELLOW}未找到备份文件${PLAIN}"
-    fi
-}
 
 # 多优选IP测速
 test_best_ip() {
     echo -e "${YELLOW}正在测速优选IP...${PLAIN}"
     
     # 优选域名测试列表
-    TEST_IPS=("saas.sin.fan" "freeyx.cloudflare88.eu.org" "cf.090227.xyz" "cdn.2020111.xyz" "cloudflare.182682.xyz" "bestcf.030101.xyz")
+    TEST_IPS=("ip.164746.xyz" "cdn.2020111.xyz" "bestcf.top" "cfip.cfcdn.vip" "speed.marisalnc.com" "freeyx.cloudflare88.eu.org" "cfip.xxxxxxxx.tk" "saas.sin.fan" "cf.090227.xyz" "cloudflare.182682.xyz" "bestcf.030101.xyz")
     
     BEST_TIME=9999000  # 使用毫秒整数，避免浮点运算
     BEST_IP_RESULT=""
@@ -174,9 +144,9 @@ test_best_ip() {
     fi
 }
 
-# 健康检查
-health_check() {
-    echo -e "${YELLOW}执行健康检查...${PLAIN}"
+# 状态检查
+status_check() {
+    echo -e "${YELLOW}执行状态检查...${PLAIN}"
     
     # 确保配置已加载
     load_config
@@ -229,17 +199,7 @@ health_check() {
         echo -e "  端口监听: ${RED}异常 - 端口 $CONF_PORT 未监听${PLAIN}"
         return
     else
-        echo -e "  端口监听: ${YELLOW}无法检测${PLAIN}"
     fi
-    
-    # 检查活跃连接数
-    CONN_COUNT=0
-    if command -v ss >/dev/null 2>&1; then
-        CONN_COUNT=$(ss -an state established | grep -c ":$CONF_PORT " 2>/dev/null || echo 0)
-    elif command -v netstat >/dev/null 2>&1; then
-        CONN_COUNT=$(netstat -an | grep ":$CONF_PORT " | grep -c ESTABLISHED 2>/dev/null || echo 0)
-    fi
-    echo -e "  当前连接: ${CYAN}$CONN_COUNT${PLAIN}"
     
     # 测试代理连接 - 使用轻量级请求
     echo -e "  测试代理连接..."
@@ -286,7 +246,6 @@ health_check() {
         if [ ! -z "$IP_INFO" ]; then
             echo -e "  IP 归属: ${CYAN}$IP_INFO${PLAIN}"
         fi
-        echo -e "  优选测试: ${GREEN}正常${PLAIN}"
         
         # 额外测试 Cloudflare CDN 站点（通过 ProxyIP 访问）
         echo -e "  ${YELLOW}--- CF 反代测试 ---${PLAIN}"
@@ -296,7 +255,6 @@ health_check() {
             CF_COLO=$(echo "$CF_RESULT" | grep "colo=" | cut -d'=' -f2)
             CF_LOC=$(echo "$CF_RESULT" | grep "loc=" | cut -d'=' -f2)
             
-            echo -e "  反代状态: ${GREEN}正常${PLAIN}"
             if [ ! -z "$CF_IP" ]; then
                 echo -e "  反代出口: ${GREEN}$CF_IP${PLAIN}"
             fi
@@ -307,22 +265,16 @@ health_check() {
             fi
         else
             echo -e "  反代状态: ${RED}失败${PLAIN}"
-            echo -e "  ${YELLOW}提示: 检查 ProxyIP 配置是否正确${PLAIN}"
+            echo -e "${YELLOW}可能原因: ProxyIP 配置错误或不可用${PLAIN}"
         fi
     else
         echo -e "  优选测试: ${RED}失败${PLAIN}"
-        
-        # 诊断：检查是否能连接到代理端口
-        if command -v nc >/dev/null 2>&1; then
-            if echo -e "\x05\x01\x00" | timeout 2 nc 127.0.0.1 $CONF_PORT >/dev/null 2>&1; then
-                echo -e "  端口响应: ${GREEN}正常${PLAIN} (代理可连接但无法建立隧道)"
-                echo -e "${YELLOW}提示: 可能是服务端连接问题，请查看日志${PLAIN}"
-            else
-                echo -e "  端口响应: ${RED}无响应${PLAIN}"
-            fi
-        fi
-        
-        echo -e "${YELLOW}建议: 运行 'journalctl -u ech-workers -n 50' 查看详细日志${PLAIN}"
+        echo -e ""
+        echo -e "${YELLOW}=== 故障排查 ===${PLAIN}"
+        echo -e "  1. 检查服务端地址是否正确: ${CYAN}$SERVER_ADDR${PLAIN}"
+        echo -e "  2. 检查 Token 是否与服务端一致"
+        echo -e "  3. 检查网络连接是否正常"
+        echo -e "  4. 查看日志: ${CYAN}journalctl -u ech-workers -n 50${PLAIN}"
     fi
 }
 
@@ -702,7 +654,7 @@ view_logs() {
 }
 
 # 脚本版本
-SCRIPT_VER="v1.1.5"
+SCRIPT_VER="v1.2.0"
 
 # 版本号比较函数：判断 $1 是否大于 $2
 # 返回 0 表示 $1 > $2，返回 1 表示 $1 <= $2
@@ -856,16 +808,14 @@ show_menu() {
     echo -e " ${GREEN}5.${PLAIN} 停止服务"
     echo -e " ${GREEN}6.${PLAIN} 重启服务"
     echo -e " ${GREEN}7.${PLAIN} 查看日志"
-    echo -e " ${GREEN}8.${PLAIN} 健康检查"
+    echo -e " ${GREEN}8.${PLAIN} 状态检查"
     echo -e " ${GREEN}9.${PLAIN} 优选IP测速"
-    echo -e " ${GREEN}10.${PLAIN} 备份配置"
-    echo -e " ${GREEN}11.${PLAIN} 恢复配置"
-    echo -e " ${GREEN}12.${PLAIN} 卸载客户端 (保留脚本)"
-    echo -e " ${GREEN}13.${PLAIN} 创建快捷指令 (修复)"
-    echo -e " ${GREEN}14.${PLAIN} 彻底卸载 (移除所有)"
+    echo -e " ${GREEN}10.${PLAIN} 卸载客户端"
+    echo -e " ${GREEN}11.${PLAIN} 创建快捷指令"
+    echo -e " ${GREEN}12.${PLAIN} 彻底卸载"
     echo -e " ${GREEN}0.${PLAIN} 退出脚本"
     echo -e "------------------------------------------------------"
-    read -p "请输入选择 [0-14]: " choice
+    read -p "请输入选择 [0-12]: " choice
     
     case $choice in
         1) install_ech ;;
@@ -875,11 +825,9 @@ show_menu() {
         5) svc_stop && echo -e "${RED}已停止${PLAIN}" ;;
         6) svc_restart && echo -e "${GREEN}已重启${PLAIN}" ;;
         7) view_logs ;;
-        8) health_check ;;
+        8) status_check ;;
         9) test_best_ip ;;
-        10) backup_config ;;
-        11) restore_config ;;
-        12) 
+        10) 
             svc_stop
             svc_disable
             rm -f $SERVICE_FILE_SYSTEMD $SERVICE_FILE_OPENWRT $BIN_PATH /usr/bin/ech
@@ -888,8 +836,8 @@ show_menu() {
             fi
             echo -e "${GREEN}已卸载${PLAIN}"
             ;;
-        13) create_shortcut ;;
-        14) uninstall_all ;;
+        11) create_shortcut ;;
+        12) uninstall_all ;;
         0) exit 0 ;;
         *) echo -e "${RED}无效选择${PLAIN}" ;;
     esac
